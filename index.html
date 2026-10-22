@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f3d3e">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>My Daily Accounts</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>My Daily Accounts</h1>
+  <div class="hr"><button id="syncbtn" onclick="syncNow(true)">Sync</button><button onclick="openSettings()" aria-label="Settings">&#9881;</button></div>
+</header>
+<main id="view"><div id="loading">Loading...</div></main>
+
+<nav>
+  <button data-tab="home" onclick="go('home')">Home</button>
+  <button data-tab="records" onclick="go('records')">Records</button>
+  <button class="fab" onclick="openRecord()" aria-label="Add record">+</button>
+  <button data-tab="budgets" onclick="go('budgets')">Budgets</button>
+  <button data-tab="accounts" onclick="go('accounts')">Accounts</button>
+</nav>
+
+<div id="ov" onclick="if(event.target===this)closeModal()"><div id="sheet"></div></div>
+<div id="toast"></div>
+
+<script src="db.js"></script>
+<script src="ui-screens.js"></script>
+<script src="ui-forms.js"></script>
+</body>
+</html>
