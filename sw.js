@@ -1,6 +1,6 @@
 /* Service worker: keeps the app files on the phone so the app opens without internet.
    When you upload new app files, change the number in CACHE (v1 -> v2). */
-const CACHE = 'mda-v2';
+const CACHE = 'mda-v3';
 const FILES = ['./', './index.html', './style.css', './db.js', './ui-screens.js', './ui-people.js', './ui-forms.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

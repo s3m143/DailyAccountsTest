@@ -272,9 +272,10 @@ function cardInfo(a) {
   const c = stmtCycle(day), L = c.prev[1], t = today();
   const stmtBal = Math.max(0, -balOn(a.Name, L));
   let paid = 0;
+  // anything that reduces the outstanding after the statement date: bill payment (Transfer), a person paying the bill (Borrow), cashback or refund (Income)
   D.records.forEach(r => {
-    const d = String(r.Date).slice(0, 10);
-    if (r.Type === 'Transfer' && r.ToAccount === a.Name && d > L && d <= t) paid += num(r.Amount);
+    const d = String(r.Date).slice(0, 10), e = effect(r, a.Name);
+    if (d > L && d <= t && e > 0) paid += e;
   });
   const due = Math.max(0, Math.round((stmtBal - paid) * 100) / 100);
   const dd = num(a.DueDay) ? dueDateFor(L, day, num(a.DueDay)) : '';
@@ -288,7 +289,7 @@ function stmtHtml(a) {
   const row = (label, small, val, cls) => '<div class="srow"><span>' + label + (small ? '<small>' + small + '</small>' : '') + '</span><b class="' + (cls || '') + '">' + val + '</b></div>';
   let when = 'Nothing to pay';
   if (i.due > 0) when = !i.dd ? 'Set the due date' : 'Pay by ' + dmy(i.dd) + (i.days < 0 ? ' (overdue ' + (-i.days) + (i.days === -1 ? ' day)' : ' days)') : i.days === 0 ? ' (today)' : ' (' + i.days + (i.days === 1 ? ' day left)' : ' days left)'));
-  return '<div class="stm">' + row('Last statement', dmy(i.L), inr(i.stmtBal)) + row('Paid after statement', '', inr(i.paid)) +
+  return '<div class="stm">' + row('Last statement', dmy(i.L), inr(i.stmtBal)) + row('Paid or credited after statement', 'Bill payments, cashback, refunds', inr(i.paid)) +
     row('Amount due now', when, inr(i.due), i.due > 0 && i.dd && i.days <= 5 ? 'neg' : '') +
     row('Current statement so far', dmy(i.cur[0]) + ' to ' + dmy(i.cur[1]), inr(i.curSpend)) + '</div>';
 }

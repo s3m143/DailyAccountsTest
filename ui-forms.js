@@ -42,6 +42,8 @@ function drawRecordForm() {
   h += fld('Date', '<input type="date" id="f_date" value="' + esc(RF.Date) + '">');
   h += fld('Amount (₹)', '<input type="number" inputmode="decimal" step="0.01" min="0" id="f_amt" placeholder="0" value="' + esc(RF.Amount) + '">');
   h += fld(t === 'Transfer' ? 'From account' : t === 'Person' ? (out ? 'Paid from account' : 'Received in account') : 'Account', '<select id="f_acc">' + opts(accs, RF.Account) + '</select>');
+  if (t === 'Person') h += '<div class="hint">If this person paid your credit card bill, choose Borrow and select your credit card here.</div>';
+  if (t === 'Income') h += '<div class="hint">Cashback or refund on a credit card: select the card here. It reduces the outstanding and the due amount.</div>';
   if (t === 'Transfer') h += fld('To account (choose the card to pay a credit card bill)', '<select id="f_to"><option value="">Select</option>' + opts(accs, RF.ToAccount) + '</select>');
   else if (t !== 'Person') h += fld('Category', '<select id="f_cat"><option value="">Select</option>' + opts(cats, RF.Category) + '</select>');
   h += fld('Note', '<input type="text" id="f_note" maxlength="120" value="' + esc(RF.Note) + '">');
