@@ -4,28 +4,29 @@ window.onerror = function (msg, src, line) {
   if (v) v.innerHTML = '<div class="empty">Error: ' + String(msg) + ' (line ' + line + ')</div>';
 };
 
-const STORES = ['Accounts', 'Categories', 'Records', 'Budgets'];
-const KEYMAP = { Accounts: 'accounts', Categories: 'categories', Records: 'records', Budgets: 'budgets' };
+const STORES = ['Accounts', 'Categories', 'Records', 'Budgets', 'People'];
+const KEYMAP = { Accounts: 'accounts', Categories: 'categories', Records: 'records', Budgets: 'budgets', People: 'people' };
 const FIELDS = {
   Accounts: ['ID', 'Name', 'Type', 'OpeningBalance', 'CreditLimit', 'BillingDay', 'DueDay'],
   Categories: ['ID', 'Name', 'Type'],
-  Records: ['ID', 'Date', 'Type', 'Amount', 'Account', 'ToAccount', 'Category', 'Note'],
-  Budgets: ['ID', 'Name', 'Amount', 'Period', 'Categories']
+  Records: ['ID', 'Date', 'Type', 'Amount', 'Account', 'ToAccount', 'Category', 'Note', 'Person'],
+  Budgets: ['ID', 'Name', 'Amount', 'Period', 'Categories'],
+  People: ['ID', 'Name', 'Phone', 'Note']
 };
 
 let DB = null;
-let ALL = { Accounts: {}, Categories: {}, Records: {}, Budgets: {} };
-let D = { accounts: [], categories: [], records: [], budgets: [] };
+let ALL = { Accounts: {}, Categories: {}, Records: {}, Budgets: {}, People: {} };
+let D = { accounts: [], categories: [], records: [], budgets: [], people: [] };
 let syncing = false, syncAgain = false, syncTimer = null, lastErr = '';
 
 /* ---------- IndexedDB helpers ---------- */
 function openDB() {
   return new Promise((res, rej) => {
-    const rq = indexedDB.open('mda', 1);
+    const rq = indexedDB.open('mda', 2);
     rq.onupgradeneeded = () => {
       const db = rq.result;
-      STORES.forEach(s => db.createObjectStore(s, { keyPath: 'ID' }));
-      db.createObjectStore('meta');
+      STORES.forEach(s => { if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'ID' }); });
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
     };
     rq.onsuccess = () => res(rq.result);
     rq.onerror = () => rej(rq.error);

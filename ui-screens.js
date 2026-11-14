@@ -1,5 +1,6 @@
 /* ui-screens.js - helpers, calculations and screens */
-let tab = 'home', recMonth = '', recAcc = '', RF = {}, AF = {}, openGroups = {}, homeMonth = '', recQ = '';
+let tab = 'home', recMonth = '', recAcc = '', RF = {}, AF = {}, openGroups = {}, homeMonth = '', recQ = '', asOf = '', curPerson = '';
+const OUT_TYPES = ['Lend', 'Repay'], IN_TYPES = ['Borrow', 'Collect'], PERSON_TYPES = OUT_TYPES.concat(IN_TYPES);
 const GROUPS = ['Cash', 'Bank', 'Credit Card'];
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,20 +23,48 @@ function sortedRecords() {
     .sort((a, b) => String(b.Date).localeCompare(String(a.Date)) || b._i - a._i);
 }
 
-function calc() {
+// change in the balance of account `acc` caused by record r
+function effect(r, acc) {
+  const amt = num(r.Amount); let e = 0;
+  if (r.Account === acc) {
+    if (r.Type === 'Income' || IN_TYPES.indexOf(r.Type) >= 0) e += amt;
+    else if (r.Type === 'Expense' || r.Type === 'Transfer' || OUT_TYPES.indexOf(r.Type) >= 0) e -= amt;
+  }
+  if (r.Type === 'Transfer' && r.ToAccount === acc) e += amt;
+  return e;
+}
+
+// balances of all accounts; upTo (yyyy-mm-dd) = balance at the end of that date
+function calc(upTo) {
   const m = {};
   D.accounts.forEach(a => m[a.Name] = { a: a, bal: num(a.OpeningBalance) });
   D.records.forEach(r => {
-    const amt = num(r.Amount);
-    if (r.Type === 'Income' && m[r.Account]) m[r.Account].bal += amt;
-    else if (r.Type === 'Expense' && m[r.Account]) m[r.Account].bal -= amt;
-    else if (r.Type === 'Transfer') {
-      if (m[r.Account]) m[r.Account].bal -= amt;
-      if (m[r.ToAccount]) m[r.ToAccount].bal += amt;
-    }
+    if (upTo && String(r.Date).slice(0, 10) > upTo) return;
+    if (m[r.Account]) m[r.Account].bal += effect(r, r.Account);
+    if (r.Type === 'Transfer' && m[r.ToAccount]) m[r.ToAccount].bal += effect(r, r.ToAccount);
   });
   return m;
 }
+
+function balOn(name, upTo) { const x = calc(upTo)[name]; return x ? x.bal : 0; }
+
+// balance of one account after each of its records (by record ID)
+function runBal(name) {
+  const a = D.accounts.find(x => x.Name === name), out = {};
+  if (!a) return out;
+  let bal = num(a.OpeningBalance);
+  D.records.map((r, i) => Object.assign({ _i: i }, r)).filter(r => r.Account === name || r.ToAccount === name)
+    .sort((x, y) => String(x.Date).localeCompare(String(y.Date)) || x._i - y._i)
+    .forEach(r => { bal += effect(r, name); out[r.ID] = bal; });
+  return out;
+}
+
+function balText(name, b) {
+  const a = D.accounts.find(x => x.Name === name);
+  return a && a.Type === 'Credit Card' ? 'Outstanding ' + inr(Math.max(0, -b)) : 'Balance ' + inr(b);
+}
+
+function setAsOf(v) { asOf = (v && v < today()) ? v : ''; render(); }
 
 function nextDue(day) {
   const t = new Date(); t.setHours(0, 0, 0, 0);
@@ -78,7 +107,7 @@ function viewAccount(id) {
 
 function render() {
   const v = $('view');
-  ({ home: rHome, records: rRecords, budgets: rBudgets, accounts: rAccounts })[tab](v);
+  ({ home: rHome, records: rRecords, budgets: rBudgets, people: rPeople, accounts: rAccounts })[tab](v);
   document.querySelectorAll('nav button[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
 }
 
@@ -87,29 +116,24 @@ function accCard(x, mode) {
   const a = x.a, b = x.bal, fn = (mode === 'edit' ? 'openAccount' : 'viewAccount') + '(\'' + a.ID + '\')';
   if (a.Type === 'Credit Card') {
     const out = Math.max(0, -b), lim = num(a.CreditLimit), pct = lim > 0 ? Math.min(100, out / lim * 100) : 0;
-    let due = '';
-    if (out > 0 && num(a.DueDay)) {
-      const d = nextDue(num(a.DueDay));
-      due = '<div class="sub ' + (d <= 5 ? 'warn' : '') + '">Bill due on day ' + a.DueDay + ' of every month (' + (d === 0 ? 'today' : d + (d === 1 ? ' day left' : ' days left')) + ')</div>';
-    }
     return '<div class="card" onclick="' + fn + '"><div class="row"><b>' + esc(a.Name) + '</b><span class="tag">Credit Card</span></div>' +
       '<div class="lbl">Outstanding</div><div class="big neg">' + inr(out) + '</div>' +
-      (lim > 0 ? '<div class="bar ' + (pct > 85 ? 'over' : '') + '"><i style="width:' + pct + '%"></i></div><div class="sub">Available ' + inr(lim - out) + ' | Limit ' + inr(lim) + '</div>' : '') + due + stmtHtml(a) + '</div>';
+      (lim > 0 ? '<div class="bar ' + (pct > 85 ? 'over' : '') + '"><i style="width:' + pct + '%"></i></div><div class="sub">Available ' + inr(lim - out) + ' | Limit ' + inr(lim) + '</div>' : '') + (asOf ? '' : stmtHtml(a)) + '</div>';
   }
   return '<div class="card" onclick="' + fn + '"><div class="row"><b>' + esc(a.Name) + '</b><span class="tag">' + esc(a.Type) + '</span></div>' +
     '<div class="lbl">Balance</div><div class="big ' + (b < 0 ? 'neg' : '') + '">' + inr(b) + '</div></div>';
 }
 
-// showDate: show date in the sub line; acct: when viewing one account, transfers show + / - for that account
-function recRow(r, showDate, acct) {
-  const t = r.Type;
-  let sign = t === 'Income' ? '+' : t === 'Expense' ? '-' : '';
+// showDate: date in the sub line; acct: when one account is open, transfers show + / -; bal: balance text after this record
+function recRow(r, showDate, acct, bal) {
+  const t = r.Type, isP = PERSON_TYPES.indexOf(t) >= 0;
+  let sign = (t === 'Income' || IN_TYPES.indexOf(t) >= 0) ? '+' : (t === 'Expense' || OUT_TYPES.indexOf(t) >= 0) ? '-' : '';
   if (t === 'Transfer' && acct) sign = r.Account === acct ? '-' : '+';
-  const title = t === 'Transfer' ? esc(r.Account) + ' → ' + esc(r.ToAccount) : esc(r.Category || '-');
+  const title = t === 'Transfer' ? esc(r.Account) + ' → ' + esc(r.ToAccount) : isP ? esc(personLabel(r)) : esc(r.Category || '-');
   const sub = [t === 'Transfer' ? 'Transfer' : esc(r.Account), showDate ? dmy(r.Date) : ''].filter(Boolean).join(' | ');
   const note = String(r.Note || '').trim();
-  return '<div class="rec" onclick="openRecord(\'' + r.ID + '\')"><div class="dot ' + t + '"></div><div class="mid"><div class="t">' + title + '</div><div class="s">' + sub + '</div>' +
-    (note ? '<div class="n">' + esc(note) + '</div>' : '') + '</div><div class="amt ' + t + '">' + sign + inr(num(r.Amount)) + '</div></div>';
+  return '<div class="rec" onclick="openRecord(\'' + r.ID + '\')"><div class="dot ' + (isP ? 'Person' : t) + '"></div><div class="mid"><div class="t">' + title + '</div><div class="s">' + sub + '</div>' +
+    (note ? '<div class="n">' + esc(note) + '</div>' : '') + (bal ? '<div class="s">' + bal + '</div>' : '') + '</div><div class="amt ' + (isP ? 'Person' : t) + '">' + sign + inr(num(r.Amount)) + '</div></div>';
 }
 
 function budgetRow(b) {
@@ -120,24 +144,31 @@ function budgetRow(b) {
 }
 
 function rHome(v) {
-  const m = calc(); let net = 0, alerts = '';
+  const m = calc(asOf); let net = 0, alerts = '';
   Object.values(m).forEach(x => {
     net += x.bal;
-    if (x.a.Type === 'Credit Card' && x.bal < 0 && num(x.a.DueDay)) {
-      const d = nextDue(num(x.a.DueDay));
-      if (d <= 5) alerts += '<div class="alert">' + esc(x.a.Name) + ' bill of ' + inr(-x.bal) + ' is due ' + (d === 0 ? 'today' : 'in ' + d + (d === 1 ? ' day' : ' days')) + '</div>';
+    if (!asOf && x.a.Type === 'Credit Card') {
+      const i = cardInfo(x.a);
+      if (i && i.due > 0 && i.dd && i.days <= 7) {
+        alerts += '<div class="alert">' + esc(x.a.Name) + ': pay ' + inr(i.due) + ' by ' + dmy(i.dd) + ' (' +
+          (i.days < 0 ? 'overdue by ' + (-i.days) + (i.days === -1 ? ' day' : ' days') : i.days === 0 ? 'due today' : i.days + (i.days === 1 ? ' day left' : ' days left')) + ')</div>';
+      }
     }
   });
   const ym = homeMonth || today().slice(0, 7); let inc = 0, exp = 0;
   D.records.forEach(r => {
     if (String(r.Date).slice(0, 7) === ym) { if (r.Type === 'Income') inc += num(r.Amount); if (r.Type === 'Expense') exp += num(r.Amount); }
   });
-  let h = '<div class="mrow"><span>Month</span><input type="month" value="' + ym + '" onchange="homeMonth=this.value;render()"></div><div class="hero"><div class="lbl">Total balance</div><div class="net">' + inr(net) + '</div><div class="note">Cash + Bank - Credit Card outstanding</div>' +
+  let h = '<div class="mrow"><span>Month</span><input type="month" value="' + ym + '" onchange="homeMonth=this.value;render()"></div>' +
+    '<div class="mrow"><span>Balance on</span><input type="date" value="' + (asOf || today()) + '" max="' + today() + '" onchange="setAsOf(this.value)"></div>' +
+    (asOf ? '<div class="alert warnbox">Showing balances as of ' + dmy(asOf) + ' <button class="link" onclick="setAsOf(\'\')">Back to today</button></div>' : '') +
+    '<div class="hero"><div class="lbl">Total balance' + (asOf ? ' on ' + dmy(asOf) : '') + '</div><div class="net">' + inr(net) + '</div><div class="note">Cash + Bank - Credit Card outstanding</div>' +
     '<div class="two"><div>Income<b>' + inr(inc) + '</b></div><div>Expense<b>' + inr(exp) + '</b></div></div></div>' + alerts;
   const sorted = sortAcc(Object.values(m));
   h += '<h2>Accounts</h2>' + (sorted.length ? '<div class="hint">Tap a group to expand it, then tap an account to see its records</div>' +
     GROUPS.map(t => { const it = sorted.filter(x => x.a.Type === t); return it.length ? groupCard(t, it) : ''; }).join('') :
     (cfg().url ? '<div class="empty">No accounts yet. If you already use the Sheet, tap Sync at the top. Otherwise add an account in the Accounts tab.</div>' : '<div class="card"><b>Welcome</b><div class="sub">To load your data from the Google Sheet, tap the gear icon at the top and enter your sync URL and secret key. You can also add accounts here without internet.</div></div>'));
+  h += peopleCard();
   h += catChart(ym);
   if (D.budgets.length) h += '<h2>Budgets</h2>' + D.budgets.map(budgetRow).join('');
   const last = sortedRecords().slice(0, 10);
@@ -150,7 +181,7 @@ function recFiltered() {
   if (recAcc) list = list.filter(r => r.Account === recAcc || r.ToAccount === recAcc);
   if (recMonth) list = list.filter(r => String(r.Date).slice(0, 7) === recMonth);
   const q = recQ.trim().toLowerCase();
-  if (q) list = list.filter(r => [r.Note, r.Category, r.Account, r.ToAccount, r.Type, r.Amount].join(' ').toLowerCase().indexOf(q) >= 0);
+  if (q) list = list.filter(r => [r.Note, r.Category, r.Account, r.ToAccount, r.Type, r.Amount, personName(r.Person)].join(' ').toLowerCase().indexOf(q) >= 0);
   if (!recMonth && !q) list = list.slice(0, 300);
   return list;
 }
@@ -161,10 +192,11 @@ function drawRecList() {
   if (!list.length) h = '<div class="empty">No records found</div>';
   else h = '<div class="hint">' + list.length + (list.length === 1 ? ' record' : ' records') + ' | Income ' + inr(inc) + ' | Expense ' + inr(exp) + '</div>';
   let cur = '';
+  const rb = recAcc ? runBal(recAcc) : null;
   list.forEach(r => {
     const d = String(r.Date).slice(0, 10);
     if (d !== cur) { cur = d; h += '<div class="dayh">' + dmy(d) + '</div>'; }
-    h += recRow(r, false, recAcc);
+    h += recRow(r, false, recAcc, rb && rb[r.ID] !== undefined ? balText(recAcc, rb[r.ID]) : '');
   });
   $('reclist').innerHTML = h;
 }
@@ -172,10 +204,12 @@ function drawRecList() {
 function rRecords(v) {
   if (recAcc && !D.accounts.some(a => a.Name === recAcc)) recAcc = '';
   let h = '';
-  const x = recAcc ? calc()[recAcc] : null;
+  const x = recAcc ? calc(asOf)[recAcc] : null;
   if (x) {
     const card = x.a.Type === 'Credit Card';
-    h += '<div class="card"><div class="row"><b>' + esc(recAcc) + '</b><span class="tag">' + esc(x.a.Type) + '</span></div><div class="lbl">' + (card ? 'Outstanding' : 'Balance') + '</div><div class="big ' + (x.bal < 0 ? 'neg' : '') + '">' + inr(card ? Math.max(0, -x.bal) : x.bal) + '</div>' + (card ? stmtHtml(x.a) : '') + '</div>';
+    h += '<div class="card"><div class="row"><b>' + esc(recAcc) + '</b><span class="tag">' + esc(x.a.Type) + '</span></div><div class="lbl">' + (card ? 'Outstanding' : 'Balance') + (asOf ? ' on ' + dmy(asOf) : ' now') + '</div><div class="big ' + (x.bal < 0 ? 'neg' : '') + '">' + inr(card ? Math.max(0, -x.bal) : x.bal) + '</div>' +
+      '<div class="mrow" style="margin:10px 0 0"><span>Check on date</span><input type="date" value="' + (asOf || today()) + '" max="' + today() + '" onchange="setAsOf(this.value)"></div>' +
+      (asOf ? '<button class="link" onclick="setAsOf(\'\')">Back to today</button>' : '') + (card && !asOf ? stmtHtml(x.a) : '') + '</div>';
   }
   h += '<input type="search" id="rq" placeholder="Search note, category or amount" value="' + esc(recQ) + '" oninput="recQ=this.value;drawRecList()">';
   h += '<div class="filter"><select onchange="recAcc=this.value;render()"><option value="">All accounts</option>' + opts(D.accounts.map(a => a.Name), recAcc) + '</select>' +
@@ -224,12 +258,39 @@ function spendOn(acc, s, e) {
   return t;
 }
 
-function stmtHtml(a) {
+// due date of a statement: the first due day after the statement date
+function dueDateFor(stmtDate, billDay, dueDay) {
+  const sd = new Date(stmtDate + 'T00:00:00');
+  const y = sd.getFullYear(), m = sd.getMonth() + (dueDay <= billDay ? 1 : 0);
+  return ymd(new Date(y, m, Math.min(dueDay, new Date(y, m + 1, 0).getDate())));
+}
+
+// statement-wise status of a credit card (null if billing date is not set)
+function cardInfo(a) {
   const day = num(a.BillingDay);
-  if (!day) return '';
-  const c = stmtCycle(day);
-  const line = (label, r) => '<div class="srow"><span>' + label + '<small>' + dmy(r[0]) + ' to ' + dmy(r[1]) + '</small></span><b>' + inr(spendOn(a.Name, r[0], r[1])) + '</b></div>';
-  return '<div class="stm">' + line('Current statement spend', c.cur) + line('Last statement spend', c.prev) + '</div>';
+  if (!day) return null;
+  const c = stmtCycle(day), L = c.prev[1], t = today();
+  const stmtBal = Math.max(0, -balOn(a.Name, L));
+  let paid = 0;
+  D.records.forEach(r => {
+    const d = String(r.Date).slice(0, 10);
+    if (r.Type === 'Transfer' && r.ToAccount === a.Name && d > L && d <= t) paid += num(r.Amount);
+  });
+  const due = Math.max(0, Math.round((stmtBal - paid) * 100) / 100);
+  const dd = num(a.DueDay) ? dueDateFor(L, day, num(a.DueDay)) : '';
+  const days = dd ? Math.round((new Date(dd + 'T00:00:00') - new Date(t + 'T00:00:00')) / 864e5) : null;
+  return { L: L, stmtBal: stmtBal, paid: paid, due: due, dd: dd, days: days, cur: c.cur, curSpend: spendOn(a.Name, c.cur[0], c.cur[1]) };
+}
+
+function stmtHtml(a) {
+  const i = cardInfo(a);
+  if (!i) return '<div class="sub">Add the billing date to see the statement-wise due</div>';
+  const row = (label, small, val, cls) => '<div class="srow"><span>' + label + (small ? '<small>' + small + '</small>' : '') + '</span><b class="' + (cls || '') + '">' + val + '</b></div>';
+  let when = 'Nothing to pay';
+  if (i.due > 0) when = !i.dd ? 'Set the due date' : 'Pay by ' + dmy(i.dd) + (i.days < 0 ? ' (overdue ' + (-i.days) + (i.days === -1 ? ' day)' : ' days)') : i.days === 0 ? ' (today)' : ' (' + i.days + (i.days === 1 ? ' day left)' : ' days left)'));
+  return '<div class="stm">' + row('Last statement', dmy(i.L), inr(i.stmtBal)) + row('Paid after statement', '', inr(i.paid)) +
+    row('Amount due now', when, inr(i.due), i.due > 0 && i.dd && i.days <= 5 ? 'neg' : '') +
+    row('Current statement so far', dmy(i.cur[0]) + ' to ' + dmy(i.cur[1]), inr(i.curSpend)) + '</div>';
 }
 
 const PAL = ['#0f3d3e', '#e8a33d', '#b83a2e', '#3b5ba5', '#1e7b4f', '#8a5a9e', '#7d8b84'];

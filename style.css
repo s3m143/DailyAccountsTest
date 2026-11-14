@@ -50,14 +50,14 @@ label.f{display:block;font-size:13px;color:var(--mu);margin:12px 0 4px}
 .btn:disabled{opacity:.6}
 .err{color:var(--exp);font-size:13px;margin-top:10px}
 nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--bd);display:flex;justify-content:space-around;align-items:center;padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))}
-nav button{border:0;background:transparent;font:inherit;font-size:12px;color:var(--mu);padding:8px 10px;min-width:60px}
+nav button{border:0;background:transparent;font:inherit;font-size:12px;color:var(--mu);padding:8px 2px;flex:1;min-width:0}
 nav button.on{color:var(--ink);font-weight:700}
 nav .fab{background:var(--sun);color:#2b1c00;font-size:30px;line-height:1;width:56px;height:56px;min-width:56px;border-radius:50%;margin-top:-26px;font-weight:400;box-shadow:0 3px 10px rgba(0,0,0,.2);padding:0}
 #ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:20}
 #ov.show{display:flex}
 #sheet{background:var(--bg);width:100%;max-width:560px;max-height:92vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:16px 16px 24px}
 #sheet h3{margin:2px 0 8px;font-size:18px}
-.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:#dfe6e3;padding:4px;border-radius:12px}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#dfe6e3;padding:4px;border-radius:12px}
 .seg button{border:0;border-radius:9px;padding:10px 0;font:inherit;font-weight:500;background:transparent;color:var(--mu)}
 .seg button.on{color:#fff;font-weight:700}
 .seg button.on.Expense{background:var(--exp)}.seg button.on.Income{background:var(--inc)}.seg button.on.Transfer{background:var(--tr)}
@@ -83,3 +83,15 @@ nav .fab{background:var(--sun);color:#2b1c00;font-size:30px;line-height:1;width:
 .pick span{font-size:13px;color:var(--mu)}
 #toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:13.5px;display:none;z-index:30;max-width:90%}
 #loading{text-align:center;color:var(--mu);padding:60px 0}
+nav .fab{flex:none}
+.seg button{font-size:13.5px}
+.seg button.on.Person{background:#7a4fa3}
+.dot.Person{background:#7a4fa3}.amt.Person{color:#7a4fa3}
+.big.inc{color:var(--inc)}
+.two2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two2 div{font-size:12px;color:var(--mu)}
+.two2 b{display:block;font-size:18px;color:var(--tx);margin-top:2px}
+.two2 b.inc{color:var(--inc)}.two2 b.neg{color:var(--exp)}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.pgrid .btn{margin-top:0;padding:12px 6px;font-size:13.5px}
+.warnbox{background:#fff4de;color:#7a4b00}

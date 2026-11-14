@@ -1,9 +1,15 @@
 /* ui-forms.js - forms, settings and app start */
 /* ---------- record form ---------- */
+const PERSON_ACTS = ['Lend', 'Borrow', 'Collect', 'Repay'];
+
 function openRecord(id) {
   const r = id ? D.records.find(x => x.ID === id) : null;
-  RF = r ? { ID: r.ID, Type: r.Type, Date: String(r.Date).slice(0, 10), Amount: r.Amount, Account: r.Account, ToAccount: r.ToAccount, Category: r.Category, Note: r.Note }
-    : { Type: 'Expense', Date: today(), Amount: '', Account: recAcc || (D.accounts[0] || {}).Name || '', ToAccount: '', Category: '', Note: '' };
+  if (r) {
+    const isP = PERSON_TYPES.indexOf(r.Type) >= 0;
+    RF = { ID: r.ID, Type: isP ? 'Person' : r.Type, Action: isP ? r.Type : 'Lend', Person: r.Person || '', PName: '', Date: String(r.Date).slice(0, 10), Amount: r.Amount, Account: r.Account, ToAccount: r.ToAccount, Category: r.Category, Note: r.Note };
+  } else {
+    RF = { Type: 'Expense', Action: 'Lend', Person: '', PName: '', Date: today(), Amount: '', Account: recAcc || (D.accounts[0] || {}).Name || '', ToAccount: '', Category: '', Note: '' };
+  }
   drawRecordForm();
 }
 
@@ -13,38 +19,61 @@ function readRF() {
   RF.Date = g('f_date') || RF.Date; RF.Amount = g('f_amt'); RF.Account = g('f_acc'); RF.Note = g('f_note');
   if ($('f_to')) RF.ToAccount = g('f_to');
   if ($('f_cat')) RF.Category = g('f_cat');
+  if ($('f_act')) RF.Action = g('f_act');
+  if ($('f_person')) RF.Person = g('f_person');
+  if ($('f_pname')) RF.PName = g('f_pname');
 }
 
+function redrawRF() { readRF(); drawRecordForm(); }
 function setType(t) { readRF(); RF.Type = t; RF.Category = ''; drawRecordForm(); }
 
 function drawRecordForm() {
   const t = RF.Type, accs = D.accounts.map(a => a.Name), cats = D.categories.filter(c => c.Type === t).map(c => c.Name);
+  const out = RF.Action === 'Lend' || RF.Action === 'Repay';
   let h = '<h3>' + (RF.ID ? 'Edit record' : 'New record') + '</h3><div class="seg">' +
-    ['Expense', 'Income', 'Transfer'].map(x => '<button class="' + (x === t ? 'on ' + x : '') + '" onclick="setType(\'' + x + '\')">' + x + '</button>').join('') + '</div>';
+    ['Expense', 'Income', 'Transfer', 'Person'].map(x => '<button class="' + (x === t ? 'on ' + x : '') + '" onclick="setType(\'' + x + '\')">' + x + '</button>').join('') + '</div>';
+  if (t === 'Person') {
+    h += fld('What happened', '<select id="f_act" onchange="redrawRF()">' + PERSON_ACTS.map(a => '<option value="' + a + '"' + (a === RF.Action ? ' selected' : '') + '>' + PACT[a] + '</option>').join('') + '</select>');
+    h += fld('Person', '<select id="f_person" onchange="redrawRF()"><option value="">Select</option>' + D.people.map(p => '<option value="' + esc(p.ID) + '"' + (p.ID === RF.Person ? ' selected' : '') + '>' + esc(p.Name) + '</option>').join('') +
+      '<option value="__new"' + (RF.Person === '__new' ? ' selected' : '') + '>+ New person</option></select>');
+    if (RF.Person === '__new') h += fld('New person name', '<input type="text" id="f_pname" maxlength="40" value="' + esc(RF.PName) + '">');
+    h += '<div class="hint">This is not income or expense. It only moves money between your account and this person.</div>';
+  }
   h += fld('Date', '<input type="date" id="f_date" value="' + esc(RF.Date) + '">');
   h += fld('Amount (₹)', '<input type="number" inputmode="decimal" step="0.01" min="0" id="f_amt" placeholder="0" value="' + esc(RF.Amount) + '">');
-  h += fld(t === 'Transfer' ? 'From account' : 'Account', '<select id="f_acc">' + opts(accs, RF.Account) + '</select>');
+  h += fld(t === 'Transfer' ? 'From account' : t === 'Person' ? (out ? 'Paid from account' : 'Received in account') : 'Account', '<select id="f_acc">' + opts(accs, RF.Account) + '</select>');
   if (t === 'Transfer') h += fld('To account (choose the card to pay a credit card bill)', '<select id="f_to"><option value="">Select</option>' + opts(accs, RF.ToAccount) + '</select>');
-  else h += fld('Category', '<select id="f_cat"><option value="">Select</option>' + opts(cats, RF.Category) + '</select>');
+  else if (t !== 'Person') h += fld('Category', '<select id="f_cat"><option value="">Select</option>' + opts(cats, RF.Category) + '</select>');
   h += fld('Note', '<input type="text" id="f_note" maxlength="120" value="' + esc(RF.Note) + '">');
   h += '<div id="err" class="err"></div><button class="btn" id="sv" onclick="saveRecord()">Save</button>';
   if (RF.ID) h += '<button class="btn ghost" onclick="askDelete(\'Records\',\'' + RF.ID + '\',\'Delete this record?\')">Delete</button>';
   modal(h);
 }
 
-function saveRecord() {
+async function saveRecord() {
   readRF();
   const t = RF.Type, amt = num(RF.Amount);
   if (amt <= 0) return showErr('Enter a valid amount');
   if (!RF.Account) return showErr('Select an account');
+  const rec = { ID: RF.ID, Date: RF.Date, Type: t, Amount: amt, Account: RF.Account, ToAccount: '', Category: '', Note: (RF.Note || '').trim(), Person: '' };
   if (t === 'Transfer') {
     if (!RF.ToAccount) return showErr('Select the account to transfer to');
     if (RF.ToAccount === RF.Account) return showErr('From and To accounts must be different');
-  } else if (!RF.Category) return showErr('Select a category');
-  send('Records', {
-    ID: RF.ID, Date: RF.Date, Type: t, Amount: amt, Account: RF.Account,
-    ToAccount: t === 'Transfer' ? RF.ToAccount : '', Category: t === 'Transfer' ? '' : RF.Category, Note: (RF.Note || '').trim()
-  });
+    rec.ToAccount = RF.ToAccount;
+  } else if (t === 'Person') {
+    if (!RF.Person) return showErr('Select a person');
+    rec.Type = RF.Action;
+    if (RF.Person === '__new') {
+      const nm = (RF.PName || '').trim();
+      if (!nm) return showErr('Enter the new person name');
+      if (D.people.some(p => p.Name.toLowerCase() === nm.toLowerCase())) return showErr('This person already exists, choose them from the list');
+      rec.Person = (await saveLocal('People', { Name: nm, Phone: '', Note: '' })).ID;
+    } else rec.Person = RF.Person;
+  } else {
+    if (!RF.Category) return showErr('Select a category');
+    rec.Category = RF.Category;
+  }
+  send('Records', rec);
 }
 
 /* ---------- account form ---------- */
